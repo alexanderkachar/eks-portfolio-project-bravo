@@ -30,3 +30,8 @@ variable "github_owner" {
   description = "GitHub owner (user or org) for the repo the runner registers against."
   type        = string
 }
+
+variable "github_repo" {
+  description = "GitHub repository name for the self-hosted runner registration. Use only the repo name, without the owner prefix."
+  type        = string
+}

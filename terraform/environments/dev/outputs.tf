@@ -22,3 +22,23 @@ output "cluster_arn" {
   description = "EKS cluster ARN."
   value       = module.eks.cluster_arn
 }
+
+output "github_actions_variables" {
+  description = "GitHub Actions repository variables expected by .github/workflows/deploy-app.yml."
+  value = {
+    AWS_REGION                = var.region
+    EKS_CLUSTER_NAME          = module.eks.cluster_name
+    APP_ECR_REPOSITORY        = local.app_ecr_repository_name
+    HELM_CHART_ECR_REPOSITORY = local.chart_ecr_repository_name
+  }
+}
+
+output "runner_pat_put_command" {
+  description = "Copy-paste command to seed the GitHub PAT into SSM for runner registration. Replace ghp_xxx with your actual token."
+  value       = module.runner.runner_pat_put_command
+}
+
+output "runner_ssm_session_command" {
+  description = "Copy-paste command to start an SSM session into the GitHub Actions runner for debugging."
+  value       = module.runner.ssm_session_command
+}
