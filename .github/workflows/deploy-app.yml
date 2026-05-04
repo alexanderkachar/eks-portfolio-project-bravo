@@ -1,0 +1,165 @@
+name: Deploy Express App
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "charts/express-app/**"
+      - ".github/workflows/deploy-app.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  APP_DIR: app
+  DOCKERFILE: app/Dockerfile
+  CHART_DIR: charts/express-app
+  RELEASE_NAME: express-app
+  NAMESPACE: app
+  REPLICA_COUNT: "2"
+  IMAGE_TAG: ${{ github.sha }}
+
+  # Repository/environment variables keep account-specific details out of source.
+  # Required: AWS_REGION, EKS_CLUSTER_NAME, APP_ECR_REPOSITORY.
+  # Optional: AWS_ROLE_TO_ASSUME, HELM_CHART_ECR_REPOSITORY.
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  APP_ECR_REPOSITORY: ${{ vars.APP_ECR_REPOSITORY }}
+  HELM_CHART_ECR_REPOSITORY: ${{ vars.HELM_CHART_ECR_REPOSITORY }}
+
+jobs:
+  deploy:
+    name: Build, Package, and Deploy
+    runs-on: self-hosted
+
+    steps:
+      # Fetch the app and Helm chart sources.
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # If AWS_ROLE_TO_ASSUME is set, use GitHub OIDC. Otherwise, the AWS CLI
+      # uses credentials already available on the self-hosted runner, such as an
+      # instance profile or exported AWS_* environment variables.
+      - name: Configure AWS credentials from OIDC role
+        if: ${{ vars.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+
+      # Resolve AWS account, ECR registry, image URI, and OCI chart references.
+      - name: Resolve deployment metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${AWS_REGION:?Set GitHub variable AWS_REGION.}"
+          : "${EKS_CLUSTER_NAME:?Set GitHub variable EKS_CLUSTER_NAME.}"
+          : "${APP_ECR_REPOSITORY:?Set GitHub variable APP_ECR_REPOSITORY.}"
+
+          CHART_NAME="$(helm show chart "$CHART_DIR" | awk -F': ' '$1 == "name" {print $2}')"
+          BASE_CHART_VERSION="$(helm show chart "$CHART_DIR" | awk -F': ' '$1 == "version" {print $2}')"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          CHART_PACKAGE_VERSION="${BASE_CHART_VERSION}-${GITHUB_RUN_NUMBER}.${SHORT_SHA}"
+
+          # Helm OCI references must end with the chart name. If no chart ECR
+          # repository is configured, use an ECR repository named after the chart.
+          HELM_REPOSITORY="${HELM_CHART_ECR_REPOSITORY:-$CHART_NAME}"
+          if [[ "${HELM_REPOSITORY##*/}" != "$CHART_NAME" ]]; then
+            echo "HELM_CHART_ECR_REPOSITORY must end with '$CHART_NAME'." >&2
+            exit 1
+          fi
+
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+          IMAGE_REPOSITORY_URI="${ECR_REGISTRY}/${APP_ECR_REPOSITORY}"
+          HELM_CHART_REF="oci://${ECR_REGISTRY}/${HELM_REPOSITORY}"
+
+          if [[ "$HELM_REPOSITORY" == "$CHART_NAME" ]]; then
+            HELM_PUSH_TARGET="oci://${ECR_REGISTRY}"
+          else
+            HELM_PARENT_REPOSITORY="${HELM_REPOSITORY%/$CHART_NAME}"
+            HELM_PUSH_TARGET="oci://${ECR_REGISTRY}/${HELM_PARENT_REPOSITORY}"
+          fi
+
+          {
+            echo "ecr_registry=${ECR_REGISTRY}"
+            echo "image_repository_uri=${IMAGE_REPOSITORY_URI}"
+            echo "chart_package_version=${CHART_PACKAGE_VERSION}"
+            echo "helm_push_target=${HELM_PUSH_TARGET}"
+            echo "helm_chart_ref=${HELM_CHART_REF}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Authenticate Docker and Helm to Amazon ECR.
+      - name: Log in to Amazon ECR
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login --username AWS --password-stdin "${{ steps.metadata.outputs.ecr_registry }}"
+
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | helm registry login --username AWS --password-stdin "${{ steps.metadata.outputs.ecr_registry }}"
+
+      # Build the Express app image from app/Dockerfile and tag it with the commit SHA.
+      - name: Build and push Docker image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker build \
+            --file "$DOCKERFILE" \
+            --tag "${{ steps.metadata.outputs.image_repository_uri }}:${IMAGE_TAG}" \
+            "$APP_DIR"
+
+          docker push "${{ steps.metadata.outputs.image_repository_uri }}:${IMAGE_TAG}"
+
+      # Package the Helm chart and push it to ECR as an OCI artifact.
+      - name: Package and push Helm chart
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p .helm-packages
+          PACKAGE_PATH="$(
+            helm package "$CHART_DIR" \
+              --destination .helm-packages \
+              --version "${{ steps.metadata.outputs.chart_package_version }}" \
+              --app-version "$IMAGE_TAG" \
+              | awk '{print $NF}'
+          )"
+
+          helm push "$PACKAGE_PATH" "${{ steps.metadata.outputs.helm_push_target }}"
+
+      # Connect to the private EKS API from the self-hosted runner inside the VPC.
+      - name: Configure kubectl for private EKS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$EKS_CLUSTER_NAME"
+
+      # Create the namespace if needed and deploy the chart from ECR.
+      - name: Deploy Helm chart from ECR
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+          helm upgrade --install "$RELEASE_NAME" "${{ steps.metadata.outputs.helm_chart_ref }}" \
+            --version "${{ steps.metadata.outputs.chart_package_version }}" \
+            --namespace "$NAMESPACE" \
+            --set replicaCount="$REPLICA_COUNT" \
+            --set-string image.repository="${{ steps.metadata.outputs.image_repository_uri }}" \
+            --set-string image.tag="$IMAGE_TAG" \
+            --set image.pullPolicy=IfNotPresent \
+            --wait \
+            --timeout 5m
