@@ -4,12 +4,22 @@ metadata:
   name: {{ include "express-app.fullname" . }}
   labels:
     {{- include "express-app.labels" . | nindent 4 }}
+  {{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
-  type: ClusterIP
+  type: {{ .Values.service.type }}
   ports:
     - name: http
       port: {{ .Values.service.port }}
       targetPort: http
       protocol: TCP
+    {{- with .Values.service.httpsPort }}
+    - name: https
+      port: {{ . }}
+      targetPort: http
+      protocol: TCP
+    {{- end }}
   selector:
     {{- include "express-app.selectorLabels" . | nindent 4 }}

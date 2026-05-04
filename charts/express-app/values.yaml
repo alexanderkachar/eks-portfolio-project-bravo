@@ -6,6 +6,9 @@ image:
   pullPolicy: IfNotPresent
 
 service:
+  type: ClusterIP
   port: 80
+  httpsPort: null
+  annotations: {}
 
 containerPort: 3000

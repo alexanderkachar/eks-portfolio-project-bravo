@@ -30,6 +30,9 @@ output "github_actions_variables" {
     EKS_CLUSTER_NAME          = module.eks.cluster_name
     APP_ECR_REPOSITORY        = local.app_ecr_repository_name
     HELM_CHART_ECR_REPOSITORY = local.chart_ecr_repository_name
+    APP_HOSTNAME              = module.route53.app_hostname
+    ACM_CERTIFICATE_ARN       = module.route53.certificate_arn
+    ROUTE53_HOSTED_ZONE_ID    = module.route53.hosted_zone_id
   }
 }
 

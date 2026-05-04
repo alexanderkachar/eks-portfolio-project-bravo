@@ -81,6 +81,17 @@ data "aws_iam_policy_document" "runner" {
     resources = [local.pat_ssm_arn]
   }
 
+  statement {
+    sid       = "Route53UpsertAppRecord"
+    actions   = ["route53:ChangeResourceRecordSets"]
+    resources = [var.route53_hosted_zone_arn]
+  }
+
+  statement {
+    sid       = "Route53ReadChangeStatus"
+    actions   = ["route53:GetChange"]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_role_policy" "runner" {

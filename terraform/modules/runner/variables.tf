@@ -43,6 +43,11 @@ variable "ecr_repository_arns" {
   type        = list(string)
 }
 
+variable "route53_hosted_zone_arn" {
+  description = "Route 53 hosted zone ARN where the runner may upsert the app DNS record."
+  type        = string
+}
+
 variable "cluster_name" {
   description = "EKS cluster name the runner deploys to."
   type        = string

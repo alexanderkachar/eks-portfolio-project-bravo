@@ -35,3 +35,21 @@ variable "github_repo" {
   description = "GitHub repository name for the self-hosted runner registration. Use only the repo name, without the owner prefix."
   type        = string
 }
+
+variable "domain_name" {
+  description = "Existing public Route 53 domain name."
+  type        = string
+  default     = "alexanderkachar.com"
+}
+
+variable "app_subdomain" {
+  description = "Subdomain used by the Express app."
+  type        = string
+  default     = "app"
+}
+
+variable "certificate_domain_name" {
+  description = "Existing ACM certificate domain name used by the app load balancer."
+  type        = string
+  default     = "*.alexanderkachar.com"
+}

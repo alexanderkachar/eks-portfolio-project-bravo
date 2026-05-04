@@ -28,6 +28,14 @@ module "ecr" {
   repository_names = [local.app_ecr_repository_name, local.chart_ecr_repository_name]
 }
 
+module "route53" {
+  source = "../../modules/route53"
+
+  domain_name             = var.domain_name
+  app_subdomain           = var.app_subdomain
+  certificate_domain_name = var.certificate_domain_name
+}
+
 module "eks" {
   source = "../../modules/eks"
 
@@ -55,7 +63,8 @@ module "runner" {
   github_repo            = var.github_repo
   pat_ssm_parameter_name = local.pat_ssm_parameter_name
 
-  ecr_repository_arns = values(module.ecr.repository_arns)
+  ecr_repository_arns     = values(module.ecr.repository_arns)
+  route53_hosted_zone_arn = module.route53.hosted_zone_arn
 
   cluster_name              = module.eks.cluster_name
   cluster_arn               = module.eks.cluster_arn
