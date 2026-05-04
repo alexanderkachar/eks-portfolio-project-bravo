@@ -64,6 +64,12 @@ variable "runner_version" {
   default     = "2.334.0"
 }
 
+variable "runner_labels" {
+  description = "Extra GitHub Actions labels assigned to this runner. GitHub automatically adds self-hosted, Linux, and X64."
+  type        = string
+  default     = "vpc"
+}
+
 variable "instance_type" {
   description = "EC2 instance type for the runner."
   type        = string

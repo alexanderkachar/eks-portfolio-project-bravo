@@ -7,6 +7,8 @@ locals {
     pat_ssm_parameter_name = var.pat_ssm_parameter_name
     github_owner           = var.github_owner
     github_repo            = var.github_repo
+    runner_name            = local.name
+    runner_labels          = var.runner_labels
   })
 
   user_data = templatefile("${path.module}/user-data.sh.tpl", {
@@ -20,19 +22,6 @@ data "aws_region" "current" {}
 
 data "aws_ssm_parameter" "al2023_ami" {
   name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64"
-}
-
-resource "aws_kms_key" "github_pat" {
-  description             = "Encrypts the GitHub PAT in SSM Parameter Store for ${local.name}."
-  enable_key_rotation     = true
-  deletion_window_in_days = 7
-
-  tags = { Name = "${var.project_name}-github-pat" }
-}
-
-resource "aws_kms_alias" "github_pat" {
-  name          = "alias/${var.project_name}-github-pat"
-  target_key_id = aws_kms_key.github_pat.key_id
 }
 
 data "aws_iam_policy_document" "assume" {
@@ -92,11 +81,6 @@ data "aws_iam_policy_document" "runner" {
     resources = [local.pat_ssm_arn]
   }
 
-  statement {
-    sid       = "KMSDecryptPATKey"
-    actions   = ["kms:Decrypt"]
-    resources = [aws_kms_key.github_pat.arn]
-  }
 }
 
 resource "aws_iam_role_policy" "runner" {

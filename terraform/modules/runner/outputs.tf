@@ -8,19 +8,9 @@ output "runner_role_arn" {
   value       = aws_iam_role.this.arn
 }
 
-output "kms_key_arn" {
-  description = "KMS CMK that encrypts the GitHub PAT SSM parameter."
-  value       = aws_kms_key.github_pat.arn
-}
-
-output "kms_alias" {
-  description = "Friendly alias for the PAT KMS key. Pass this as `--key-id` when running `aws ssm put-parameter` to seed the PAT."
-  value       = aws_kms_alias.github_pat.name
-}
-
 output "runner_pat_put_command" {
   description = "Copy-paste command to seed the GitHub PAT into SSM. Replace ghp_xxx with your actual token."
-  value       = "aws ssm put-parameter --name ${var.pat_ssm_parameter_name} --type SecureString --value ghp_xxx --key-id ${aws_kms_alias.github_pat.name} --overwrite --region ${data.aws_region.current.name}"
+  value       = "aws ssm put-parameter --name ${var.pat_ssm_parameter_name} --type SecureString --value ghp_xxx --overwrite --region ${data.aws_region.current.name}"
 }
 
 output "security_group_id" {

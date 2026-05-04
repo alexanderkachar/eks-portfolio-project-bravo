@@ -1,8 +1,14 @@
 #!/bin/bash
 
-set -eu
+set -euo pipefail
 
 cd /opt/actions-runner
+
+MODE="$${1:-register}"
+REPO_URL="https://github.com/${github_owner}/${github_repo}"
+RUNNERS_API="https://api.github.com/repos/${github_owner}/${github_repo}/actions/runners"
+RUNNER_NAME="${runner_name}"
+RUNNER_LABELS="${runner_labels}"
 
 PAT=$(aws ssm get-parameter \
   --name "${pat_ssm_parameter_name}" \
@@ -10,19 +16,46 @@ PAT=$(aws ssm get-parameter \
   --query Parameter.Value \
   --output text)
 
-REG_TOKEN=$(curl -sS -X POST \
-  -H "Authorization: token $PAT" \
-  -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/${github_owner}/${github_repo}/actions/runners/registration-token" \
-  | jq -r .token)
+request_token() {
+  local endpoint="$1"
 
-./config.sh remove --token "$REG_TOKEN" 2>/dev/null || true
+  curl -fsS -X POST \
+    -H "Authorization: token $PAT" \
+    -H "Accept: application/vnd.github+json" \
+    "$RUNNERS_API/$endpoint" \
+    | jq -er .token
+}
 
-./config.sh \
-  --url "https://github.com/${github_owner}/${github_repo}" \
-  --token "$REG_TOKEN" \
-  --name "vpc-runner-$(hostname)-$(date +%s)" \
-  --labels "self-hosted,linux,x64,vpc" \
-  --unattended \
-  --ephemeral \
-  --replace
+remove_local_runner() {
+  if [[ -f .runner || -f .credentials ]]; then
+    local remove_token
+    remove_token="$(request_token remove-token)"
+    ./config.sh remove --token "$remove_token" || true
+  fi
+}
+
+case "$MODE" in
+  register)
+    remove_local_runner
+
+    REG_TOKEN="$(request_token registration-token)"
+
+    ./config.sh \
+      --url "$REPO_URL" \
+      --token "$REG_TOKEN" \
+      --name "$RUNNER_NAME" \
+      --labels "$RUNNER_LABELS" \
+      --unattended \
+      --ephemeral \
+      --replace
+    ;;
+
+  unregister)
+    remove_local_runner
+    ;;
+
+  *)
+    echo "Usage: $0 [register|unregister]" >&2
+    exit 2
+    ;;
+esac

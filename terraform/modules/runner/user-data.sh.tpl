@@ -2,7 +2,7 @@
 set -eux
 
 dnf update -y
-dnf install -y docker git tar gzip jq awscli
+dnf install -y docker git tar gzip jq awscli libicu
 systemctl enable --now docker
 usermod -aG docker ec2-user
 
@@ -36,10 +36,12 @@ After=network.target
 Type=simple
 User=ec2-user
 WorkingDirectory=/opt/actions-runner
-ExecStartPre=/usr/local/bin/runner-register.sh
+ExecStartPre=/usr/local/bin/runner-register.sh register
 ExecStart=/opt/actions-runner/run.sh
+ExecStopPost=/usr/local/bin/runner-register.sh unregister
 Restart=always
 RestartSec=10
+TimeoutStopSec=30
 
 [Install]
 WantedBy=multi-user.target
