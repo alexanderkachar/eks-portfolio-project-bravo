@@ -81,6 +81,15 @@ resource "aws_eks_pod_identity_association" "ebs_csi" {
   depends_on = [aws_eks_addon.pod_identity_agent]
 }
 
+resource "aws_eks_pod_identity_association" "load_balancer_controller" {
+  cluster_name    = aws_eks_cluster.this.name
+  namespace       = "kube-system"
+  service_account = "aws-load-balancer-controller"
+  role_arn        = var.load_balancer_controller_role_arn
+
+  depends_on = [aws_eks_addon.pod_identity_agent]
+}
+
 resource "aws_eks_addon" "ebs_csi" {
   cluster_name                = aws_eks_cluster.this.name
   addon_name                  = "aws-ebs-csi-driver"

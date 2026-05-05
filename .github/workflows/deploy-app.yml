@@ -21,18 +21,18 @@ env:
   NAMESPACE: app
   REPLICA_COUNT: "2"
   IMAGE_TAG: ${{ github.sha }}
+  AWS_LBC_CHART_VERSION: "1.14.0"
 
   # Repository/environment variables keep account-specific details out of source.
-  # Required: AWS_REGION, EKS_CLUSTER_NAME, APP_ECR_REPOSITORY,
-  # APP_HOSTNAME, ACM_CERTIFICATE_ARN, ROUTE53_HOSTED_ZONE_ID.
+  # Required: AWS_REGION, EKS_CLUSTER_NAME, APP_ECR_REPOSITORY, VPC_ID,
+  # APP_TARGET_GROUP_ARN.
   # Optional: AWS_ROLE_TO_ASSUME, HELM_CHART_ECR_REPOSITORY.
   AWS_REGION: ${{ vars.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  VPC_ID: ${{ vars.VPC_ID }}
   APP_ECR_REPOSITORY: ${{ vars.APP_ECR_REPOSITORY }}
   HELM_CHART_ECR_REPOSITORY: ${{ vars.HELM_CHART_ECR_REPOSITORY }}
-  APP_HOSTNAME: ${{ vars.APP_HOSTNAME }}
-  ACM_CERTIFICATE_ARN: ${{ vars.ACM_CERTIFICATE_ARN }}
-  ROUTE53_HOSTED_ZONE_ID: ${{ vars.ROUTE53_HOSTED_ZONE_ID }}
+  APP_TARGET_GROUP_ARN: ${{ vars.APP_TARGET_GROUP_ARN }}
 
 jobs:
   deploy:
@@ -63,10 +63,9 @@ jobs:
 
           : "${AWS_REGION:?Set GitHub variable AWS_REGION.}"
           : "${EKS_CLUSTER_NAME:?Set GitHub variable EKS_CLUSTER_NAME.}"
+          : "${VPC_ID:?Set GitHub variable VPC_ID.}"
           : "${APP_ECR_REPOSITORY:?Set GitHub variable APP_ECR_REPOSITORY.}"
-          : "${APP_HOSTNAME:?Set GitHub variable APP_HOSTNAME.}"
-          : "${ACM_CERTIFICATE_ARN:?Set GitHub variable ACM_CERTIFICATE_ARN.}"
-          : "${ROUTE53_HOSTED_ZONE_ID:?Set GitHub variable ROUTE53_HOSTED_ZONE_ID.}"
+          : "${APP_TARGET_GROUP_ARN:?Set GitHub variable APP_TARGET_GROUP_ARN.}"
 
           CHART_NAME="$(helm show chart "$CHART_DIR" | awk -F': ' '$1 == "name" {print $2}')"
           BASE_CHART_VERSION="$(helm show chart "$CHART_DIR" | awk -F': ' '$1 == "version" {print $2}')"
@@ -153,6 +152,26 @@ jobs:
             --region "$AWS_REGION" \
             --name "$EKS_CLUSTER_NAME"
 
+      # Install the controller and CRDs that reconcile TargetGroupBinding targets.
+      - name: Install AWS Load Balancer Controller
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          helm repo add eks https://aws.github.io/eks-charts --force-update
+          helm repo update eks
+
+          helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+            --namespace kube-system \
+            --version "$AWS_LBC_CHART_VERSION" \
+            --set clusterName="$EKS_CLUSTER_NAME" \
+            --set region="$AWS_REGION" \
+            --set vpcId="$VPC_ID" \
+            --set serviceAccount.create=true \
+            --set serviceAccount.name=aws-load-balancer-controller \
+            --wait \
+            --timeout 5m
+
       # Create the namespace if needed and deploy the chart from ECR.
       - name: Deploy Helm chart from ECR
         shell: bash
@@ -168,65 +187,9 @@ jobs:
             --set-string image.repository="${{ steps.metadata.outputs.image_repository_uri }}" \
             --set-string image.tag="$IMAGE_TAG" \
             --set image.pullPolicy=IfNotPresent \
-            --set service.type=LoadBalancer \
-            --set service.httpsPort=443 \
-            --set-string service.annotations."service\\.beta\\.kubernetes\\.io/aws-load-balancer-ssl-cert"="$ACM_CERTIFICATE_ARN" \
-            --set-string service.annotations."service\\.beta\\.kubernetes\\.io/aws-load-balancer-backend-protocol"=http \
-            --set-string service.annotations."service\\.beta\\.kubernetes\\.io/aws-load-balancer-ssl-ports"=https \
+            --set service.type=ClusterIP \
+            --set targetGroupBinding.enabled=true \
+            --set-string targetGroupBinding.targetGroupArn="$APP_TARGET_GROUP_ARN" \
+            --set-string targetGroupBinding.targetType=ip \
             --wait \
             --timeout 5m
-
-      # Publish the assigned AWS load balancer hostname as app.alexanderkachar.com.
-      - name: Upsert Route 53 app record
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          SERVICE_NAME="$RELEASE_NAME"
-          LOAD_BALANCER_HOSTNAME=""
-
-          for _ in {1..60}; do
-            LOAD_BALANCER_HOSTNAME="$(
-              kubectl get service "$SERVICE_NAME" \
-                --namespace "$NAMESPACE" \
-                --output jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true
-            )"
-
-            if [[ -n "$LOAD_BALANCER_HOSTNAME" ]]; then
-              break
-            fi
-
-            sleep 10
-          done
-
-          if [[ -z "$LOAD_BALANCER_HOSTNAME" ]]; then
-            kubectl get service "$SERVICE_NAME" --namespace "$NAMESPACE" --output wide
-            echo "Timed out waiting for load balancer hostname." >&2
-            exit 1
-          fi
-
-          CHANGE_BATCH="$(mktemp)"
-          jq -n \
-            --arg name "${APP_HOSTNAME}." \
-            --arg value "${LOAD_BALANCER_HOSTNAME}." \
-            '{
-              Changes: [{
-                Action: "UPSERT",
-                ResourceRecordSet: {
-                  Name: $name,
-                  Type: "CNAME",
-                  TTL: 60,
-                  ResourceRecords: [{ Value: $value }]
-                }
-              }]
-            }' > "$CHANGE_BATCH"
-
-          CHANGE_ID="$(
-            aws route53 change-resource-record-sets \
-              --hosted-zone-id "$ROUTE53_HOSTED_ZONE_ID" \
-              --change-batch "file://$CHANGE_BATCH" \
-              --query ChangeInfo.Id \
-              --output text
-          )"
-
-          aws route53 wait resource-record-sets-changed --id "$CHANGE_ID"

@@ -1,0 +1,14 @@
+{{- if .Values.targetGroupBinding.enabled }}
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: {{ include "express-app.fullname" . }}
+  labels:
+    {{- include "express-app.labels" . | nindent 4 }}
+spec:
+  targetGroupARN: {{ required "targetGroupBinding.targetGroupArn is required" .Values.targetGroupBinding.targetGroupArn | quote }}
+  targetType: {{ .Values.targetGroupBinding.targetType | quote }}
+  serviceRef:
+    name: {{ include "express-app.fullname" . }}
+    port: {{ .Values.service.port }}
+{{- end }}

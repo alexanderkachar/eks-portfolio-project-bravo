@@ -39,15 +39,29 @@ module "route53" {
 module "eks" {
   source = "../../modules/eks"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  cluster_name        = local.cluster_name
-  cluster_version     = var.cluster_version
-  subnet_ids          = module.vpc.private_subnet_ids
-  cluster_role_arn    = module.iam.cluster_role_arn
-  node_role_arn       = module.iam.node_role_arn
-  ebs_csi_role_arn    = module.iam.ebs_csi_role_arn
-  admin_principal_arn = var.admin_principal_arn
+  project_name                      = var.project_name
+  environment                       = var.environment
+  cluster_name                      = local.cluster_name
+  cluster_version                   = var.cluster_version
+  subnet_ids                        = module.vpc.private_subnet_ids
+  cluster_role_arn                  = module.iam.cluster_role_arn
+  node_role_arn                     = module.iam.node_role_arn
+  ebs_csi_role_arn                  = module.iam.ebs_csi_role_arn
+  load_balancer_controller_role_arn = module.iam.load_balancer_controller_role_arn
+  admin_principal_arn               = var.admin_principal_arn
+}
+
+module "elb" {
+  source = "../../modules/elb"
+
+  project_name              = var.project_name
+  environment               = var.environment
+  vpc_id                    = module.vpc.vpc_id
+  public_subnet_ids         = module.vpc.public_subnet_ids
+  cluster_security_group_id = module.eks.cluster_security_group_id
+  hosted_zone_id            = module.route53.hosted_zone_id
+  app_hostname              = module.route53.app_hostname
+  certificate_arn           = module.route53.certificate_arn
 }
 
 module "runner" {

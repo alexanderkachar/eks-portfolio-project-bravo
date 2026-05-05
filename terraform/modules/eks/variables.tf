@@ -39,6 +39,11 @@ variable "ebs_csi_role_arn" {
   type        = string
 }
 
+variable "load_balancer_controller_role_arn" {
+  description = "Pod Identity role ARN for AWS Load Balancer Controller."
+  type        = string
+}
+
 variable "admin_principal_arn" {
   description = "IAM principal granted cluster-admin via access entry. Must be set for the operator to kubectl into the cluster."
   type        = string

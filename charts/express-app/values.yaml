@@ -11,4 +11,9 @@ service:
   httpsPort: null
   annotations: {}
 
+targetGroupBinding:
+  enabled: false
+  targetGroupArn: ""
+  targetType: ip
+
 containerPort: 3000

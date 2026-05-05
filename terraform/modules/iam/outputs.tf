@@ -12,3 +12,8 @@ output "ebs_csi_role_arn" {
   description = "Pod Identity role for the EBS CSI controller."
   value       = aws_iam_role.ebs_csi.arn
 }
+
+output "load_balancer_controller_role_arn" {
+  description = "Pod Identity role for AWS Load Balancer Controller."
+  value       = aws_iam_role.load_balancer_controller.arn
+}

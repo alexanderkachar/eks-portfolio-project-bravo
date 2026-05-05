@@ -28,11 +28,11 @@ output "github_actions_variables" {
   value = {
     AWS_REGION                = var.region
     EKS_CLUSTER_NAME          = module.eks.cluster_name
+    VPC_ID                    = module.vpc.vpc_id
     APP_ECR_REPOSITORY        = local.app_ecr_repository_name
     HELM_CHART_ECR_REPOSITORY = local.chart_ecr_repository_name
     APP_HOSTNAME              = module.route53.app_hostname
-    ACM_CERTIFICATE_ARN       = module.route53.certificate_arn
-    ROUTE53_HOSTED_ZONE_ID    = module.route53.hosted_zone_id
+    APP_TARGET_GROUP_ARN      = module.elb.target_group_arn
   }
 }
 
