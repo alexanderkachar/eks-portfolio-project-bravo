@@ -22,15 +22,17 @@ env:
   REPLICA_COUNT: "2"
   IMAGE_TAG: ${{ github.sha }}
   AWS_LBC_CHART_VERSION: "1.14.0"
+  AWS_LBC_IMAGE_TAG: "v2.14.0"
 
   # Repository/environment variables keep account-specific details out of source.
   # Required: AWS_REGION, EKS_CLUSTER_NAME, APP_ECR_REPOSITORY, VPC_ID,
-  # APP_TARGET_GROUP_ARN.
+  # AWS_LBC_ECR_REPOSITORY, APP_TARGET_GROUP_ARN.
   # Optional: AWS_ROLE_TO_ASSUME, HELM_CHART_ECR_REPOSITORY.
   AWS_REGION: ${{ vars.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
   VPC_ID: ${{ vars.VPC_ID }}
   APP_ECR_REPOSITORY: ${{ vars.APP_ECR_REPOSITORY }}
+  AWS_LBC_ECR_REPOSITORY: ${{ vars.AWS_LBC_ECR_REPOSITORY }}
   HELM_CHART_ECR_REPOSITORY: ${{ vars.HELM_CHART_ECR_REPOSITORY }}
   APP_TARGET_GROUP_ARN: ${{ vars.APP_TARGET_GROUP_ARN }}
 
@@ -65,6 +67,7 @@ jobs:
           : "${EKS_CLUSTER_NAME:?Set GitHub variable EKS_CLUSTER_NAME.}"
           : "${VPC_ID:?Set GitHub variable VPC_ID.}"
           : "${APP_ECR_REPOSITORY:?Set GitHub variable APP_ECR_REPOSITORY.}"
+          : "${AWS_LBC_ECR_REPOSITORY:?Set GitHub variable AWS_LBC_ECR_REPOSITORY.}"
           : "${APP_TARGET_GROUP_ARN:?Set GitHub variable APP_TARGET_GROUP_ARN.}"
 
           CHART_NAME="$(helm show chart "$CHART_DIR" | awk -F': ' '$1 == "name" {print $2}')"
@@ -83,6 +86,7 @@ jobs:
           ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
           ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
           IMAGE_REPOSITORY_URI="${ECR_REGISTRY}/${APP_ECR_REPOSITORY}"
+          AWS_LBC_IMAGE_URI="${ECR_REGISTRY}/${AWS_LBC_ECR_REPOSITORY}:${AWS_LBC_IMAGE_TAG}"
           HELM_CHART_REF="oci://${ECR_REGISTRY}/${HELM_REPOSITORY}"
 
           if [[ "$HELM_REPOSITORY" == "$CHART_NAME" ]]; then
@@ -95,6 +99,7 @@ jobs:
           {
             echo "ecr_registry=${ECR_REGISTRY}"
             echo "image_repository_uri=${IMAGE_REPOSITORY_URI}"
+            echo "aws_lbc_image_uri=${AWS_LBC_IMAGE_URI}"
             echo "chart_package_version=${CHART_PACKAGE_VERSION}"
             echo "helm_push_target=${HELM_PUSH_TARGET}"
             echo "helm_chart_ref=${HELM_CHART_REF}"
@@ -124,6 +129,18 @@ jobs:
             "$APP_DIR"
 
           docker push "${{ steps.metadata.outputs.image_repository_uri }}:${IMAGE_TAG}"
+
+      # Mirror controller image into private ECR because worker nodes have no public internet egress.
+      - name: Mirror AWS Load Balancer Controller image
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          docker pull "public.ecr.aws/eks/aws-load-balancer-controller:${AWS_LBC_IMAGE_TAG}"
+          docker tag \
+            "public.ecr.aws/eks/aws-load-balancer-controller:${AWS_LBC_IMAGE_TAG}" \
+            "${{ steps.metadata.outputs.aws_lbc_image_uri }}"
+          docker push "${{ steps.metadata.outputs.aws_lbc_image_uri }}"
 
       # Package the Helm chart and push it to ECR as an OCI artifact.
       - name: Package and push Helm chart
@@ -167,6 +184,8 @@ jobs:
             --set clusterName="$EKS_CLUSTER_NAME" \
             --set region="$AWS_REGION" \
             --set vpcId="$VPC_ID" \
+            --set-string image.repository="${{ steps.metadata.outputs.ecr_registry }}/${AWS_LBC_ECR_REPOSITORY}" \
+            --set-string image.tag="$AWS_LBC_IMAGE_TAG" \
             --set serviceAccount.create=true \
             --set serviceAccount.name=aws-load-balancer-controller \
             --wait \

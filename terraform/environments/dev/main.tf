@@ -1,8 +1,9 @@
 locals {
-  cluster_name              = "${var.project_name}-${var.environment}-cluster"
-  app_ecr_repository_name   = "${var.project_name}-${var.environment}-app"
-  chart_ecr_repository_name = "express-app"
-  pat_ssm_parameter_name    = "/${var.project_name}/github/pat"
+  cluster_name                = "${var.project_name}-${var.environment}-cluster"
+  app_ecr_repository_name     = "${var.project_name}-${var.environment}-app"
+  aws_lbc_ecr_repository_name = "${var.project_name}-${var.environment}-aws-load-balancer-controller"
+  chart_ecr_repository_name   = "express-app"
+  pat_ssm_parameter_name      = "/${var.project_name}/github/pat"
 }
 
 module "vpc" {
@@ -23,9 +24,13 @@ module "iam" {
 module "ecr" {
   source = "../../modules/ecr"
 
-  project_name     = var.project_name
-  environment      = var.environment
-  repository_names = [local.app_ecr_repository_name, local.chart_ecr_repository_name]
+  project_name = var.project_name
+  environment  = var.environment
+  repository_names = [
+    local.app_ecr_repository_name,
+    local.aws_lbc_ecr_repository_name,
+    local.chart_ecr_repository_name,
+  ]
 }
 
 module "route53" {

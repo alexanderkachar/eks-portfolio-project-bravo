@@ -30,6 +30,7 @@ output "github_actions_variables" {
     EKS_CLUSTER_NAME          = module.eks.cluster_name
     VPC_ID                    = module.vpc.vpc_id
     APP_ECR_REPOSITORY        = local.app_ecr_repository_name
+    AWS_LBC_ECR_REPOSITORY    = local.aws_lbc_ecr_repository_name
     HELM_CHART_ECR_REPOSITORY = local.chart_ecr_repository_name
     APP_HOSTNAME              = module.route53.app_hostname
     APP_TARGET_GROUP_ARN      = module.elb.target_group_arn
