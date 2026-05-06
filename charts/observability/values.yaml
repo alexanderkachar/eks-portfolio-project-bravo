@@ -1,6 +1,18 @@
 global:
   imageRegistry: ""
 
+storageClass:
+  enabled: true
+  name: observability-gp3
+  isDefault: true
+  provisioner: ebs.csi.aws.com
+  reclaimPolicy: Delete
+  volumeBindingMode: WaitForFirstConsumer
+  allowVolumeExpansion: true
+  parameters:
+    type: gp3
+    encrypted: "true"
+
 kube-prometheus-stack:
   alertmanager:
     enabled: false
