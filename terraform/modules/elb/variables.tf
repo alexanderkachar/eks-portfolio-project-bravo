@@ -33,6 +33,11 @@ variable "app_hostname" {
   type        = string
 }
 
+variable "grafana_hostname" {
+  description = "Public DNS hostname for Grafana."
+  type        = string
+}
+
 variable "certificate_arn" {
   description = "ACM certificate ARN used by the HTTPS listener."
   type        = string
@@ -48,4 +53,16 @@ variable "health_check_path" {
   description = "HTTP path used by the target group health check."
   type        = string
   default     = "/"
+}
+
+variable "grafana_target_port" {
+  description = "Grafana pod/container port registered in the ALB target group."
+  type        = number
+  default     = 3000
+}
+
+variable "grafana_health_check_path" {
+  description = "HTTP path used by the Grafana target group health check."
+  type        = string
+  default     = "/api/health"
 }

@@ -22,3 +22,8 @@ output "app_hostname" {
   description = "Public hostname for the Express app."
   value       = local.app_hostname
 }
+
+output "grafana_hostname" {
+  description = "Public hostname for Grafana."
+  value       = local.grafana_hostname
+}

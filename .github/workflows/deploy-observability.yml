@@ -1,0 +1,122 @@
+name: Deploy Observability
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "charts/observability/**"
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  CHART_DIR: charts/observability
+  RELEASE_NAME: observability
+  NAMESPACE: observability
+
+  # Required GitHub Actions variables:
+  # AWS_REGION, EKS_CLUSTER_NAME, OBSERVABILITY_HELM_CHART_ECR_REPOSITORY,
+  # OBSERVABILITY_IMAGE_REGISTRY, GRAFANA_TARGET_GROUP_ARN.
+  # Optional: AWS_ROLE_TO_ASSUME.
+  AWS_REGION: ${{ vars.AWS_REGION }}
+  EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+  OBSERVABILITY_HELM_CHART_ECR_REPOSITORY: ${{ vars.OBSERVABILITY_HELM_CHART_ECR_REPOSITORY }}
+  OBSERVABILITY_IMAGE_REGISTRY: ${{ vars.OBSERVABILITY_IMAGE_REGISTRY }}
+  GRAFANA_TARGET_GROUP_ARN: ${{ vars.GRAFANA_TARGET_GROUP_ARN }}
+
+jobs:
+  deploy:
+    name: Package and Deploy
+    runs-on: self-hosted
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials from OIDC role
+        if: ${{ vars.AWS_ROLE_TO_ASSUME != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+
+      - name: Resolve chart metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          : "${AWS_REGION:?Set GitHub variable AWS_REGION.}"
+          : "${EKS_CLUSTER_NAME:?Set GitHub variable EKS_CLUSTER_NAME.}"
+          : "${OBSERVABILITY_HELM_CHART_ECR_REPOSITORY:?Set GitHub variable OBSERVABILITY_HELM_CHART_ECR_REPOSITORY.}"
+          : "${OBSERVABILITY_IMAGE_REGISTRY:?Set GitHub variable OBSERVABILITY_IMAGE_REGISTRY.}"
+          : "${GRAFANA_TARGET_GROUP_ARN:?Set GitHub variable GRAFANA_TARGET_GROUP_ARN.}"
+
+          CHART_NAME="$(helm show chart "$CHART_DIR" | awk -F': ' '$1 == "name" {print $2}')"
+          BASE_CHART_VERSION="$(helm show chart "$CHART_DIR" | awk -F': ' '$1 == "version" {print $2}')"
+          SHORT_SHA="${GITHUB_SHA::7}"
+          CHART_PACKAGE_VERSION="${BASE_CHART_VERSION}-${GITHUB_RUN_NUMBER}.${SHORT_SHA}"
+
+          if [[ "${OBSERVABILITY_HELM_CHART_ECR_REPOSITORY##*/}" != "$CHART_NAME" ]]; then
+            echo "OBSERVABILITY_HELM_CHART_ECR_REPOSITORY must end with '$CHART_NAME'." >&2
+            exit 1
+          fi
+
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+          {
+            echo "ecr_registry=${ECR_REGISTRY}"
+            echo "chart_package_version=${CHART_PACKAGE_VERSION}"
+            echo "chart_ref=oci://${ECR_REGISTRY}/${OBSERVABILITY_HELM_CHART_ECR_REPOSITORY}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Mirror observability images
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          scripts/mirror-observability-images.sh \
+            --chart-dir "$CHART_DIR" \
+            --region "$AWS_REGION" \
+            --registry "$OBSERVABILITY_IMAGE_REGISTRY"
+
+      - name: Package and push Helm chart
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          scripts/push-observability-chart.sh \
+            --chart-dir "$CHART_DIR" \
+            --repository "$OBSERVABILITY_HELM_CHART_ECR_REPOSITORY" \
+            --region "$AWS_REGION" \
+            --registry "${{ steps.metadata.outputs.ecr_registry }}" \
+            --version "${{ steps.metadata.outputs.chart_package_version }}"
+
+      - name: Configure kubectl for private EKS
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          aws eks update-kubeconfig \
+            --region "$AWS_REGION" \
+            --name "$EKS_CLUSTER_NAME"
+
+      - name: Deploy observability chart
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+
+          helm upgrade --install "$RELEASE_NAME" "${{ steps.metadata.outputs.chart_ref }}" \
+            --version "${{ steps.metadata.outputs.chart_package_version }}" \
+            --namespace "$NAMESPACE" \
+            --set-string global.imageRegistry="$OBSERVABILITY_IMAGE_REGISTRY" \
+            --set grafanaTargetGroupBinding.enabled=true \
+            --set-string grafanaTargetGroupBinding.targetGroupArn="$GRAFANA_TARGET_GROUP_ARN" \
+            --set-string grafanaTargetGroupBinding.targetType=ip \
+            --wait \
+            --timeout 15m

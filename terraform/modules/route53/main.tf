@@ -2,6 +2,7 @@ locals {
   domain_name             = trimsuffix(var.domain_name, ".")
   certificate_domain_name = coalesce(var.certificate_domain_name, "*.${local.domain_name}")
   app_hostname            = "${var.app_subdomain}.${local.domain_name}"
+  grafana_hostname        = "${var.grafana_subdomain}.${local.domain_name}"
 }
 
 data "aws_route53_zone" "this" {

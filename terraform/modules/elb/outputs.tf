@@ -17,3 +17,8 @@ output "target_group_arn" {
   description = "Target group ARN for the app TargetGroupBinding."
   value       = aws_lb_target_group.this.arn
 }
+
+output "grafana_target_group_arn" {
+  description = "Target group ARN for the Grafana TargetGroupBinding."
+  value       = aws_lb_target_group.grafana.arn
+}

@@ -1,0 +1,12 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "observability.fullname" . }}-kubernetes-dashboard
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+    grafana_dashboard: "1"
+data:
+  kubernetes-observability.json: |-
+{{ .Files.Get "dashboards/kubernetes-observability.json" | nindent 4 }}
+{{- end }}

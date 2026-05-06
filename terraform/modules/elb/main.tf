@@ -46,6 +46,18 @@ resource "aws_security_group_rule" "alb_to_cluster" {
   source_security_group_id = aws_security_group.this.id
 }
 
+resource "aws_security_group_rule" "alb_to_grafana" {
+  count = var.grafana_target_port == var.target_port ? 0 : 1
+
+  type                     = "ingress"
+  description              = "App ALB to Grafana pod targets."
+  from_port                = var.grafana_target_port
+  to_port                  = var.grafana_target_port
+  protocol                 = "tcp"
+  security_group_id        = var.cluster_security_group_id
+  source_security_group_id = aws_security_group.this.id
+}
+
 resource "aws_lb" "this" {
   name               = "${local.name_prefix}-app-alb"
   load_balancer_type = "application"
@@ -84,6 +96,32 @@ resource "aws_lb_target_group" "this" {
   }
 }
 
+resource "aws_lb_target_group" "grafana" {
+  name        = "${local.name_prefix}-grafana-tg"
+  port        = var.grafana_target_port
+  protocol    = "HTTP"
+  target_type = "ip"
+  vpc_id      = var.vpc_id
+
+  deregistration_delay = 30
+
+  health_check {
+    enabled             = true
+    healthy_threshold   = 2
+    interval            = 15
+    matcher             = "200-399"
+    path                = var.grafana_health_check_path
+    port                = "traffic-port"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name = "${local.name_prefix}-grafana-tg"
+  }
+}
+
 resource "aws_lb_listener" "http" {
   load_balancer_arn = aws_lb.this.arn
   port              = 80
@@ -113,9 +151,34 @@ resource "aws_lb_listener" "https" {
   }
 }
 
+resource "aws_lb_listener_rule" "grafana" {
+  listener_arn = aws_lb_listener.https.arn
+  priority     = 100
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.grafana.arn
+  }
+
+  condition {
+    host_header {
+      values = [var.grafana_hostname]
+    }
+  }
+}
+
 resource "aws_route53_record" "app" {
   zone_id         = var.hosted_zone_id
   name            = var.app_hostname
+  type            = "CNAME"
+  ttl             = 60
+  records         = [aws_lb.this.dns_name]
+  allow_overwrite = true
+}
+
+resource "aws_route53_record" "grafana" {
+  zone_id         = var.hosted_zone_id
+  name            = var.grafana_hostname
   type            = "CNAME"
   ttl             = 60
   records         = [aws_lb.this.dns_name]

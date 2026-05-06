@@ -9,6 +9,12 @@ variable "app_subdomain" {
   default     = "app"
 }
 
+variable "grafana_subdomain" {
+  description = "Subdomain used by Grafana. Defaults to the requested graphana spelling."
+  type        = string
+  default     = "graphana"
+}
+
 variable "certificate_domain_name" {
   description = "Existing ACM certificate domain name to use for the app load balancer."
   type        = string

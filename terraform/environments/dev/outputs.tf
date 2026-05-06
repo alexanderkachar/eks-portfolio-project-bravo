@@ -24,16 +24,20 @@ output "cluster_arn" {
 }
 
 output "github_actions_variables" {
-  description = "GitHub Actions repository variables expected by .github/workflows/deploy-app.yml."
+  description = "GitHub Actions repository variables expected by deployment workflows."
   value = {
-    AWS_REGION                = var.region
-    EKS_CLUSTER_NAME          = module.eks.cluster_name
-    VPC_ID                    = module.vpc.vpc_id
-    APP_ECR_REPOSITORY        = local.app_ecr_repository_name
-    AWS_LBC_ECR_REPOSITORY    = local.aws_lbc_ecr_repository_name
-    HELM_CHART_ECR_REPOSITORY = local.chart_ecr_repository_name
-    APP_HOSTNAME              = module.route53.app_hostname
-    APP_TARGET_GROUP_ARN      = module.elb.target_group_arn
+    AWS_REGION                              = var.region
+    EKS_CLUSTER_NAME                        = module.eks.cluster_name
+    VPC_ID                                  = module.vpc.vpc_id
+    APP_ECR_REPOSITORY                      = local.app_ecr_repository_name
+    AWS_LBC_ECR_REPOSITORY                  = local.aws_lbc_ecr_repository_name
+    HELM_CHART_ECR_REPOSITORY               = local.chart_ecr_repository_name
+    OBSERVABILITY_HELM_CHART_ECR_REPOSITORY = local.observability_chart_ecr_repository_name
+    OBSERVABILITY_IMAGE_REGISTRY            = module.ecr.registry_url
+    APP_HOSTNAME                            = module.route53.app_hostname
+    APP_TARGET_GROUP_ARN                    = module.elb.target_group_arn
+    GRAFANA_HOSTNAME                        = module.route53.grafana_hostname
+    GRAFANA_TARGET_GROUP_ARN                = module.elb.grafana_target_group_arn
   }
 }
 

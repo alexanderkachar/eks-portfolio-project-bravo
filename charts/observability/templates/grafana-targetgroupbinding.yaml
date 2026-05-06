@@ -1,0 +1,14 @@
+{{- if .Values.grafanaTargetGroupBinding.enabled }}
+apiVersion: elbv2.k8s.aws/v1beta1
+kind: TargetGroupBinding
+metadata:
+  name: {{ include "observability.fullname" . }}-grafana
+  labels:
+    {{- include "observability.labels" . | nindent 4 }}
+spec:
+  targetGroupARN: {{ required "grafanaTargetGroupBinding.targetGroupArn is required" .Values.grafanaTargetGroupBinding.targetGroupArn | quote }}
+  targetType: {{ .Values.grafanaTargetGroupBinding.targetType | quote }}
+  serviceRef:
+    name: {{ include "observability.grafanaServiceName" . | quote }}
+    port: {{ .Values.grafanaTargetGroupBinding.servicePort }}
+{{- end }}

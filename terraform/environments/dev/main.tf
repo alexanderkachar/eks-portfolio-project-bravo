@@ -1,9 +1,24 @@
 locals {
-  cluster_name                = "${var.project_name}-${var.environment}-cluster"
-  app_ecr_repository_name     = "${var.project_name}-${var.environment}-app"
-  aws_lbc_ecr_repository_name = "${var.project_name}-${var.environment}-aws-load-balancer-controller"
-  chart_ecr_repository_name   = "express-app"
-  pat_ssm_parameter_name      = "/${var.project_name}/github/pat"
+  cluster_name                            = "${var.project_name}-${var.environment}-cluster"
+  app_ecr_repository_name                 = "${var.project_name}-${var.environment}-app"
+  aws_lbc_ecr_repository_name             = "${var.project_name}-${var.environment}-aws-load-balancer-controller"
+  chart_ecr_repository_name               = "express-app"
+  observability_chart_ecr_repository_name = "observability"
+  observability_image_ecr_repository_names = [
+    "grafana/grafana",
+    "grafana/loki",
+    "grafana/promtail",
+    "jkroepke/kube-webhook-certgen",
+    "kiwigrid/k8s-sidecar",
+    "kube-state-metrics/kube-state-metrics",
+    "nginxinc/nginx-unprivileged",
+    "prometheus-operator/prometheus-config-reloader",
+    "prometheus-operator/prometheus-operator",
+    "prometheus/node-exporter",
+    "prometheus/prometheus",
+    "thanos/thanos",
+  ]
+  pat_ssm_parameter_name = "/${var.project_name}/github/pat"
 }
 
 module "vpc" {
@@ -26,11 +41,15 @@ module "ecr" {
 
   project_name = var.project_name
   environment  = var.environment
-  repository_names = [
-    local.app_ecr_repository_name,
-    local.aws_lbc_ecr_repository_name,
-    local.chart_ecr_repository_name,
-  ]
+  repository_names = concat(
+    [
+      local.app_ecr_repository_name,
+      local.aws_lbc_ecr_repository_name,
+      local.chart_ecr_repository_name,
+      local.observability_chart_ecr_repository_name,
+    ],
+    local.observability_image_ecr_repository_names,
+  )
 }
 
 module "route53" {
@@ -38,6 +57,7 @@ module "route53" {
 
   domain_name             = var.domain_name
   app_subdomain           = var.app_subdomain
+  grafana_subdomain       = var.grafana_subdomain
   certificate_domain_name = var.certificate_domain_name
 }
 
@@ -66,6 +86,7 @@ module "elb" {
   cluster_security_group_id = module.eks.cluster_security_group_id
   hosted_zone_id            = module.route53.hosted_zone_id
   app_hostname              = module.route53.app_hostname
+  grafana_hostname          = module.route53.grafana_hostname
   certificate_arn           = module.route53.certificate_arn
 }
 
