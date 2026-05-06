@@ -73,6 +73,15 @@ jobs:
             echo "chart_ref=oci://${ECR_REGISTRY}/${OBSERVABILITY_HELM_CHART_ECR_REPOSITORY}"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Prepare Helm repositories
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+          helm repo add grafana https://grafana.github.io/helm-charts --force-update
+          helm repo update prometheus-community grafana
+
       - name: Mirror observability images
         shell: bash
         run: |
