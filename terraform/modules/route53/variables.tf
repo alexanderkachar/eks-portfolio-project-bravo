@@ -10,9 +10,9 @@ variable "app_subdomain" {
 }
 
 variable "grafana_subdomain" {
-  description = "Subdomain used by Grafana. Defaults to the requested graphana spelling."
+  description = "Subdomain used by Grafana."
   type        = string
-  default     = "graphana"
+  default     = "grafana"
 }
 
 variable "certificate_domain_name" {
