@@ -2,7 +2,19 @@
 set -eux
 
 dnf update -y
-dnf install -y docker git tar gzip jq awscli libicu
+dnf install -y awscli docker git gzip jq libicu tar
+
+# Amazon Linux 2023 does not currently ship ripgrep in the enabled repos.
+# The observability image mirror script uses `rg` to discover rendered chart images.
+RG_VERSION="14.1.1"
+rg_tmp="$(mktemp -d)"
+curl -fsSL \
+  -o "$rg_tmp/ripgrep.tar.gz" \
+  "https://github.com/BurntSushi/ripgrep/releases/download/$RG_VERSION/ripgrep-$RG_VERSION-x86_64-unknown-linux-musl.tar.gz"
+tar -xzf "$rg_tmp/ripgrep.tar.gz" -C "$rg_tmp"
+install -m 0755 "$rg_tmp"/ripgrep-"$RG_VERSION"-*/rg /usr/local/bin/rg
+rm -rf "$rg_tmp"
+
 systemctl enable --now docker
 usermod -aG docker ec2-user
 

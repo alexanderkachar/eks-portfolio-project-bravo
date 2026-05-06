@@ -38,6 +38,12 @@ repo_root() {
   git rev-parse --show-toplevel 2>/dev/null || pwd
 }
 
+ensure_helm_repositories() {
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+  helm repo add grafana https://grafana.github.io/helm-charts --force-update
+  helm repo update prometheus-community grafana
+}
+
 repo_name_from_image() {
   local image_without_registry="$1"
   local repo_name
@@ -104,6 +110,7 @@ fi
 manifest="$(mktemp)"
 trap 'rm -f "$manifest"' EXIT
 
+ensure_helm_repositories
 helm dependency build "$chart_dir"
 helm template observability "$chart_dir" --namespace observability > "$manifest"
 

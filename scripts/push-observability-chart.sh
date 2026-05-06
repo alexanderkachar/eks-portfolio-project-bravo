@@ -40,6 +40,12 @@ repo_root() {
   git rev-parse --show-toplevel 2>/dev/null || pwd
 }
 
+ensure_helm_repositories() {
+  helm repo add prometheus-community https://prometheus-community.github.io/helm-charts --force-update
+  helm repo add grafana https://grafana.github.io/helm-charts --force-update
+  helm repo update prometheus-community grafana
+}
+
 root="$(repo_root)"
 chart_dir="$root/charts/observability"
 repository="${OBSERVABILITY_HELM_CHART_ECR_REPOSITORY:-observability}"
@@ -128,6 +134,7 @@ echo "Chart:      $chart_dir"
 echo "Version:    $version"
 echo "Repository: $registry/$repository"
 
+ensure_helm_repositories
 helm dependency build "$chart_dir"
 
 aws ecr get-login-password --region "$region" \
