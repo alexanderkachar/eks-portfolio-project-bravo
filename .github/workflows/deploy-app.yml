@@ -24,10 +24,6 @@ env:
   AWS_LBC_CHART_VERSION: "1.14.0"
   AWS_LBC_IMAGE_TAG: "v2.14.0"
 
-  # Repository/environment variables keep account-specific details out of source.
-  # Required: AWS_REGION, EKS_CLUSTER_NAME, APP_ECR_REPOSITORY, VPC_ID,
-  # AWS_LBC_ECR_REPOSITORY, APP_TARGET_GROUP_ARN.
-  # Optional: AWS_ROLE_TO_ASSUME, HELM_CHART_ECR_REPOSITORY.
   AWS_REGION: ${{ vars.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
   VPC_ID: ${{ vars.VPC_ID }}
@@ -42,21 +38,16 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      # Fetch the app and Helm chart sources.
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      # If AWS_ROLE_TO_ASSUME is set, use GitHub OIDC. Otherwise, the AWS CLI
-      # uses credentials already available on the self-hosted runner, such as an
-      # instance profile or exported AWS_* environment variables.
       - name: Configure AWS credentials from OIDC role
         if: ${{ vars.AWS_ROLE_TO_ASSUME != '' }}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
-      # Resolve AWS account, ECR registry, image URI, and OCI chart references.
       - name: Resolve deployment metadata
         id: metadata
         shell: bash
@@ -75,8 +66,6 @@ jobs:
           SHORT_SHA="${GITHUB_SHA::7}"
           CHART_PACKAGE_VERSION="${BASE_CHART_VERSION}-${GITHUB_RUN_NUMBER}.${SHORT_SHA}"
 
-          # Helm OCI references must end with the chart name. If no chart ECR
-          # repository is configured, use an ECR repository named after the chart.
           HELM_REPOSITORY="${HELM_CHART_ECR_REPOSITORY:-$CHART_NAME}"
           if [[ "${HELM_REPOSITORY##*/}" != "$CHART_NAME" ]]; then
             echo "HELM_CHART_ECR_REPOSITORY must end with '$CHART_NAME'." >&2
@@ -105,7 +94,6 @@ jobs:
             echo "helm_chart_ref=${HELM_CHART_REF}"
           } >> "$GITHUB_OUTPUT"
 
-      # Authenticate Docker and Helm to Amazon ECR.
       - name: Log in to Amazon ECR
         shell: bash
         run: |
@@ -117,7 +105,6 @@ jobs:
           aws ecr get-login-password --region "$AWS_REGION" \
             | helm registry login --username AWS --password-stdin "${{ steps.metadata.outputs.ecr_registry }}"
 
-      # Build the Express app image from app/Dockerfile and tag it with the commit SHA.
       - name: Build and push Docker image
         shell: bash
         run: |
@@ -130,7 +117,6 @@ jobs:
 
           docker push "${{ steps.metadata.outputs.image_repository_uri }}:${IMAGE_TAG}"
 
-      # Mirror controller image into private ECR because worker nodes have no public internet egress.
       - name: Mirror AWS Load Balancer Controller image
         shell: bash
         run: |
@@ -142,7 +128,6 @@ jobs:
             "${{ steps.metadata.outputs.aws_lbc_image_uri }}"
           docker push "${{ steps.metadata.outputs.aws_lbc_image_uri }}"
 
-      # Package the Helm chart and push it to ECR as an OCI artifact.
       - name: Package and push Helm chart
         shell: bash
         run: |
@@ -159,7 +144,6 @@ jobs:
 
           helm push "$PACKAGE_PATH" "${{ steps.metadata.outputs.helm_push_target }}"
 
-      # Connect to the private EKS API from the self-hosted runner inside the VPC.
       - name: Configure kubectl for private EKS
         shell: bash
         run: |
@@ -169,7 +153,6 @@ jobs:
             --region "$AWS_REGION" \
             --name "$EKS_CLUSTER_NAME"
 
-      # Install the controller and CRDs that reconcile TargetGroupBinding targets.
       - name: Install AWS Load Balancer Controller
         shell: bash
         run: |
@@ -191,7 +174,6 @@ jobs:
             --wait \
             --timeout 5m
 
-      # Create the namespace if needed and deploy the chart from ECR.
       - name: Deploy Helm chart from ECR
         shell: bash
         run: |

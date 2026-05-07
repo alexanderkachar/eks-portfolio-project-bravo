@@ -16,10 +16,6 @@ env:
   RELEASE_NAME: observability
   NAMESPACE: observability
 
-  # Required GitHub Actions variables:
-  # AWS_REGION, EKS_CLUSTER_NAME, OBSERVABILITY_HELM_CHART_ECR_REPOSITORY,
-  # OBSERVABILITY_IMAGE_REGISTRY, GRAFANA_TARGET_GROUP_ARN.
-  # Optional: AWS_ROLE_TO_ASSUME.
   AWS_REGION: ${{ vars.AWS_REGION }}
   EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
   OBSERVABILITY_HELM_CHART_ECR_REPOSITORY: ${{ vars.OBSERVABILITY_HELM_CHART_ECR_REPOSITORY }}
@@ -33,11 +29,11 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configure AWS credentials from OIDC role
         if: ${{ vars.AWS_ROLE_TO_ASSUME != '' }}
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-region: ${{ env.AWS_REGION }}
           role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}

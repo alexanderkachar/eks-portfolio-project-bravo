@@ -2,7 +2,21 @@
 set -eux
 
 dnf update -y
-dnf install -y awscli docker git gzip jq libicu tar
+dnf install -y awscli docker git gzip jq libicu tar xz
+
+# Install the project Node.js LTS version for workflow scripts that invoke node/npm directly.
+NODE_VERSION="${node_version}"
+node_tmp="$(mktemp -d)"
+curl -fsSL \
+  -o "$node_tmp/node.tar.xz" \
+  "https://nodejs.org/dist/v$NODE_VERSION/node-v$NODE_VERSION-linux-x64.tar.xz"
+mkdir -p "/opt/node-v$NODE_VERSION"
+tar -xJf "$node_tmp/node.tar.xz" -C "/opt/node-v$NODE_VERSION" --strip-components=1
+ln -sfn "/opt/node-v$NODE_VERSION/bin/node" /usr/local/bin/node
+ln -sfn "/opt/node-v$NODE_VERSION/bin/npm" /usr/local/bin/npm
+ln -sfn "/opt/node-v$NODE_VERSION/bin/npx" /usr/local/bin/npx
+ln -sfn "/opt/node-v$NODE_VERSION/bin/corepack" /usr/local/bin/corepack
+rm -rf "$node_tmp"
 
 # Amazon Linux 2023 does not currently ship ripgrep in the enabled repos.
 # The observability image mirror script uses `rg` to discover rendered chart images.
@@ -23,7 +37,7 @@ curl -LO "https://dl.k8s.io/release/$(curl -Ls https://dl.k8s.io/release/stable.
 chmod +x kubectl
 mv kubectl /usr/local/bin/
 
-# Helm — the package-charts workflow needs `helm push` to ECR OCI.
+# Helm is required for chart packaging and ECR OCI pushes.
 curl -fsSL -o /tmp/get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
 chmod +x /tmp/get_helm.sh
 /tmp/get_helm.sh
@@ -48,6 +62,7 @@ After=network.target
 Type=simple
 User=ec2-user
 WorkingDirectory=/opt/actions-runner
+Environment=FORCE_JAVASCRIPT_ACTIONS_TO_NODE24=true
 ExecStartPre=/usr/local/bin/runner-register.sh register
 ExecStart=/opt/actions-runner/run.sh
 ExecStopPost=/usr/local/bin/runner-register.sh unregister

@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Simple Express Hello World app",
   "main": "server.js",
+  "engines": {
+    "node": "24.15.0"
+  },
   "scripts": {
     "start": "node server.js"
   },

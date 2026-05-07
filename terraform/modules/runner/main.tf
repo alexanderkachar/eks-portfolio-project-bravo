@@ -13,6 +13,7 @@ locals {
 
   user_data = templatefile("${path.module}/user-data.sh.tpl", {
     runner_version             = var.runner_version
+    node_version               = var.node_version
     runner_register_script_b64 = base64encode(local.register_script)
   })
 }

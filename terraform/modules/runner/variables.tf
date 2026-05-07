@@ -69,6 +69,12 @@ variable "runner_version" {
   default     = "2.334.0"
 }
 
+variable "node_version" {
+  description = "Node.js version installed on the runner host for workflow tooling."
+  type        = string
+  default     = "24.15.0"
+}
+
 variable "runner_labels" {
   description = "Extra GitHub Actions labels assigned to this runner. GitHub automatically adds self-hosted, Linux, and X64."
   type        = string
