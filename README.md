@@ -1,4 +1,4 @@
-# EKS Portfolio Project Bravo
+# Fully private eks platform
 
 This repository contains a production-style AWS EKS platform built as a DevOps and cloud engineering portfolio project. It demonstrates how to provision a private Kubernetes environment on AWS, build and publish a containerized application, deploy it with Helm, expose it through an AWS Application Load Balancer, and operate it with a basic observability stack.
 
@@ -20,40 +20,6 @@ At a high level, the project creates:
 - Helm-based deployment for monitoring and logging with Prometheus, Grafana, Loki, and Promtail.
 
 The project is designed around a private-cluster model: the EKS API endpoint is private, worker nodes run in private subnets, and deployment automation runs from inside the AWS network.
-
-## Architecture Overview
-
-```text
-Developer
-   |
-   | push to main
-   v
-GitHub Actions
-   |
-   | self-hosted runner inside AWS VPC
-   v
-Amazon ECR <-------------------------------+
-   |                                       |
-   | Docker images and Helm OCI charts      |
-   v                                       |
-Private Amazon EKS Cluster                  |
-   |                                       |
-   | Helm deployments                       |
-   v                                       |
-Express App Pods        Observability Stack |
-   |                    Prometheus          |
-   |                    Grafana             |
-   |                    Loki                |
-   |                    Promtail            |
-   v                                       |
-AWS Load Balancer Controller                |
-   |                                       |
-   v                                       |
-Application Load Balancer                   |
-   |                                       |
-   v                                       |
-Route 53 DNS + ACM HTTPS                    |
-```
 
 ## Repository Structure
 
